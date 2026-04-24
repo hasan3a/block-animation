@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Block Animation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000000;
+            padding: 32px;
+            overflow-x: hidden;
+        }
+
+
+        .svg-wrapper {
+            /* position: sticky;
+            top: 0;
+            left: 0; */
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .svg-wrapper svg {
+            width: auto;
+            height: 80vh;
+            overflow: visible;
+        }
+
+        .parent {
+            display: flex;
+            color: white;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .parent .text {
+            display: flex;
+            align-items: center;
+            justify-items: center;
+            flex-direction: column;
+        }
+
+        p {
+            text-align: center;
+            width: 40%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="parent">
+        <div class="text">
+            <h1>Lorem ipsum dolor sit amet.</h1>
+            <p>Lorem ipsum dolor sit amet. Lorem ipsum, dolor sit amet consectetur adipisicing elit. Tempore voluptas
+                error quos et mollitia consequuntur cum eveniet reiciendis tempora eius.</p>
+        </div>
+        <div class="scroll-container">
+            <div class="svg-wrapper" id="svgWrapper">
+                <!-- SVG will be loaded here -->
+            </div>
+        </div>
+
+
+    </div>
+    <div class="spacer" style="height: 100vh; width: 100%;background-color: aquamarine;"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script>
+        const BLOCK_WIDTH = 100;
+        const SPREAD_X = 2000;   // horizontal spread range (change for mobile)
+        const SPREAD_Y = 400;   // vertical spread range (change for mobile)
+
+        fetch('block.svg')
+            .then(r => r.text())
+            .then(svgText => {
+                document.getElementById('svgWrapper').innerHTML = svgText;
+                initAnimation();
+            });
+
+        function initAnimation() {
+            gsap.registerPlugin(ScrollTrigger);
+
+            const svg = document.querySelector('.svg-wrapper svg');
+            const vb = svg.viewBox.baseVal;
+            const centerX = vb.width / 2;
+            const centerY = vb.height / 2;
+
+            const groupIds = [
+                'Group 1', 'Group 2', 'Group 3', 'Group 4', 'Group 5',
+                'Group 6', 'Group 7', 'Group 8', 'Group 9', 'Group 10',
+                'Group 11', 'Group 12', 'Group 14', 'Group 15', 'Group 16',
+                'Group 17', 'Group 18', 'Group 19', 'Group 20', 'Group 21',
+                'Group 22', 'Group 23', 'Group 26', 'Group 27', 'Group 29'
+            ];
+
+            const blocks = [];
+
+            groupIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+
+                const bbox = el.getBBox();
+                const origCX = bbox.x + bbox.width / 2;
+                const origCY = bbox.y + bbox.height / 2;
+
+                // Distance from SVG center → determines animation speed
+                const dx = origCX - centerX;
+                const dy = origCY - centerY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                // Assign a random spread offset (fixed per block)
+                const spreadX = (Math.random() * 2 - 1) * SPREAD_X;
+                const spreadY = (Math.random() * 2 - 1) * SPREAD_Y;
+
+                blocks.push({ el, origCX, origCY, dx, dy, dist, spreadX, spreadY });
+            });
+
+            // Normalize distances for duration mapping
+            // Normalize distances for duration mapping
+            const maxDist = Math.max(...blocks.map(b => b.dist)) || 1;
+
+            // Map distance to duration: closer = faster (0.4s), farther = slower (1.4s)
+            const getDuration = dist => 0.4 + (dist / maxDist) * 1.0;
+
+            // ---- PHASE 0: Set all blocks to their spread positions ----
+            blocks.forEach(b => {
+                // Direction = same as their position relative to center (normalized)
+                const dirX = b.dist > 0 ? b.dx / b.dist : 0;
+                const dirY = b.dist > 0 ? b.dy / b.dist : 0;
+
+                // Spread amount is proportional to distance from center
+                const ratio = b.dist / maxDist;
+                b.spreadX = dirX * ratio * SPREAD_X;
+                b.spreadY = dirY * ratio * SPREAD_Y;
+
+                gsap.set(b.el, {
+                    x: b.spreadX,
+                    y: b.spreadY,
+                    svgOrigin: `${b.origCX} ${b.origCY}`
+                });
+            });
+
+            // ---- PHASE 1: On page load — fly INTO original positions ----
+            // Closer blocks finish faster, farther blocks take longer
+            blocks.forEach(b => {
+                const dur = getDuration(b.dist);
+                gsap.to(b.el, {
+                    x: 0,
+                    y: 0,
+                    duration: dur,
+                    ease: 'power3.out',
+                    delay: 0.1  // tiny uniform delay so page is ready
+                });
+            });
+
+            // ---- PHASE 2: On scroll — fly back OUT to spread positions ----
+            // Each block has its own sub-tween, staggered by distance
+            const tlSpread = gsap.timeline({ paused: true });
+
+            // Sort by distance so near blocks go first in timeline
+            // const sorted = [...blocks].sort((a, b) => a.dist - b.dist);
+            const sorted = [...blocks].sort((a, b) => b.dist - a.dist);
+
+            sorted.forEach((b, i) => {
+                const dur = getDuration(b.dist);
+                tlSpread.to(b.el, {
+                    x: b.spreadX,
+                    y: b.spreadY,
+                    duration: dur,
+                    ease: 'power3.in'
+                }, i * 0.02);  // slight stagger by distance order
+            });
+
+            ScrollTrigger.create({
+                trigger: '.svg-wrapper',
+                start: 'top top',
+                end: 'bottom center',
+                scrub: 1,
+                animation: tlSpread
+            });
+        }
+    </script>
+</body>
+
+</html>
